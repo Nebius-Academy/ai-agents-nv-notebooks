@@ -15,6 +15,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from datetime import UTC, datetime
@@ -35,7 +36,13 @@ NEBIUS_PROVIDER = "deep-research-nebius"
 TAVILY_PROVIDER = "deep-research-tavily"
 
 SECRET_KEYS = ("TOFA_API_KEY", "TAVILY_API_KEY")
-SANDBOX_CONFIG_KEYS = ("LEAD_MODEL", "WORKER_MODEL", "SEARCH_EXCLUDE_DOMAINS")
+SANDBOX_CONFIG_KEYS = (
+    "LEAD_MODEL",
+    "WORKER_MODEL",
+    "SEARCH_EXCLUDE_DOMAINS",
+    "TOKEN_FACTORY_REGION",
+)
+REGION_PATTERN = re.compile(r"^[a-z0-9-]+$")
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,18}$")
 
 
@@ -172,6 +179,18 @@ def build_image(env: dict[str, str]) -> None:
     )
 
 
+def _render_policy(env: dict[str, str], directory: Path) -> Path:
+    """Fill the Token Factory region into policy.yaml; return the rendered file."""
+    region = env.get("TOKEN_FACTORY_REGION") or "us-central1"
+    if not REGION_PATTERN.fullmatch(region):
+        raise SystemExit(f"Invalid TOKEN_FACTORY_REGION: {region!r}")
+    rendered = directory / "policy.yaml"
+    rendered.write_text(
+        POLICY_FILE.read_text().replace("${TOKEN_FACTORY_REGION}", region)
+    )
+    return rendered
+
+
 def _validate_name(name: str) -> str:
     if not NAME_PATTERN.fullmatch(name):
         raise SystemExit(
@@ -212,6 +231,9 @@ def run_agent(args: argparse.Namespace, env: dict[str, str]) -> int:
     }
     sandbox_env.update((key, env[key]) for key in SANDBOX_CONFIG_KEYS if env.get(key))
 
+    policy_dir = tempfile.TemporaryDirectory()
+    policy_file = _render_policy(env, Path(policy_dir.name))
+
     create_command = [
         "openshell",
         "sandbox",
@@ -221,7 +243,7 @@ def run_agent(args: argparse.Namespace, env: dict[str, str]) -> int:
         "--from",
         AGENT_IMAGE,
         "--policy",
-        str(POLICY_FILE),
+        str(policy_file),
         "--provider",
         NEBIUS_PROVIDER,
         "--provider",
@@ -245,7 +267,10 @@ def run_agent(args: argparse.Namespace, env: dict[str, str]) -> int:
     # completed run unavailable for downloads and policy demonstrations.
     create_command.extend(["--detach", "--no-tty", "--", "/usr/bin/sleep", "infinity"])
 
-    create = _run(create_command, env=env, check=False)
+    try:
+        create = _run(create_command, env=env, check=False)
+    finally:
+        policy_dir.cleanup()
     final_status = create.returncode
 
     agent_command = [

@@ -8,7 +8,8 @@ from langchain_nebius import ChatNebius
 LEAD_MODEL_NAME = os.environ.get("LEAD_MODEL", "MiniMaxAI/MiniMax-M3")
 WORKER_MODEL_NAME = os.environ.get("WORKER_MODEL", "MiniMaxAI/MiniMax-M3")
 # Keep the client endpoint aligned with the OpenShell policy and provider profile.
-BASE_URL = "https://api.studio.nebius.ai/v1/"
+REGION = os.environ.get("TOKEN_FACTORY_REGION", "us-central1")
+BASE_URL = f"https://api.tokenfactory.{REGION}.nebius.com/v1/"
 
 # The sandbox receives the credential as TOFA_API_KEY; ChatNebius would otherwise
 # look for NEBIUS_API_KEY.

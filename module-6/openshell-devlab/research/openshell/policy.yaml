@@ -36,7 +36,8 @@ network_policies:
   nebius_chat_completions:
     name: nebius-chat-completions-only
     endpoints:
-      - host: api.studio.nebius.ai
+      # ${TOKEN_FACTORY_REGION} is filled in by run.py (default us-central1).
+      - host: api.tokenfactory.${TOKEN_FACTORY_REGION}.nebius.com
         port: 443
         protocol: rest
         enforcement: enforce
